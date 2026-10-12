@@ -10,7 +10,7 @@ A Docker Compose lab for learning MongoDB replication, elections, and failover. 
 
 `mongo1` is preferred as primary, but elections depend on member availability and replication progress. Always query the current primary before stopping it.
 
-This is a **local development and learning lab**. Authentication and TLS are disabled, and published ports bind to `127.0.0.1` by default. All containers share one machine, so this demonstrates process failure rather than protection from host failure. Production deployments need authentication, TLS, backups, and separate failure domains.
+This is a **local development and learning lab**. Authentication and TLS are disabled, and published ports bind to `0.0.0.0` by default. Use a trusted private network and restrict access to these unauthenticated ports. All containers share one machine, so this demonstrates process failure rather than protection from host failure. Production deployments need authentication, TLS, backups, and separate failure domains.
 
 ## Start
 
@@ -53,35 +53,81 @@ Do not downgrade an existing data volume simply by selecting an older image. Loc
 
 ## Connect
 
-Inside the Compose network, Docker resolves service names automatically. The helper selects a running container and connects using normal replica-set discovery, so it also works while `mongo1` is stopped:
+The replica set advertises the original host-based addresses:
+
+```text
+host.docker.internal:27017
+host.docker.internal:27018
+host.docker.internal:27019
+```
+
+Each MongoDB service maps `host.docker.internal` to `${MONGO_HOST_IP:-host-gateway}` using `extra_hosts`. The default `host-gateway` value points to the Docker host. Set `MONGO_HOST_IP` in `.env` to a reachable host IP if needed. Member traffic passes through the host's published ports, so the ports must be accessible through that address; binding only to loopback generally will not work with a native Linux host gateway.
+
+Inside the MongoDB containers, use the helper or connect directly:
 
 ```sh
 ./scripts/mongosh.sh --quiet --eval 'printjson(db.hello())'
+docker compose exec mongo1 mongosh 'mongodb://host.docker.internal:27017,host.docker.internal:27018,host.docker.internal:27019/qjp?replicaSet=rs0'
 ```
 
-For an interactive shell while `mongo1` is running:
+For an application running directly on the Docker host, ensure `host.docker.internal` resolves there. If necessary, add this to that host's `/etc/hosts` (on Windows, `C:\Windows\System32\drivers\etc\hosts`):
+
+```text
+127.0.0.1 host.docker.internal
+```
+
+For a client on another machine, map that name to the MongoDB host's reachable IP instead. A replica-aware client discovers these advertised addresses even if its initial URI uses IP seeds.
+
+### Application container on another host
+
+Containers do not inherit the host machine's `/etc/hosts`. In the **application's** `.env`, set the MongoDB host IP, for example:
+
+```dotenv
+MONGO_HOST_IP=10.0.1.107
+```
+
+In that application's existing Compose service, add:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:${MONGO_HOST_IP:?Set MONGO_HOST_IP in .env}"
+```
+
+Use this application configuration:
+
+```json
+{
+  "databaseURI": "mongodb://host.docker.internal:27017,host.docker.internal:27018,host.docker.internal:27019/qjp?replicaSet=rs0"
+}
+```
+
+Replace the example IP and ports as needed, then recreate the application service with `docker compose up -d --force-recreate <app-service>`. Do not use `host-gateway` for an application on a different host: it would target that application's Docker host rather than the MongoDB host.
+
+### Existing sets initialized with mongo1/mongo2/mongo3
+
+Editing `rs.initiate()` affects only a fresh set. An existing set keeps its advertised names in the data volumes. To migrate without deleting data, back up first, apply the new Compose host mappings, and verify the host-published endpoints:
 
 ```sh
-docker compose exec mongo1 mongosh 'mongodb://mongo1:27017,mongo2:27018,mongo3:27019/?replicaSet=rs0'
+docker compose up -d --wait --wait-timeout 180
+docker compose exec mongo1 mongosh 'mongodb://host.docker.internal:27017/?directConnection=true' --quiet --eval 'printjson(db.hello())'
 ```
 
-For an application on your **host computer**, first add this line to its hosts file with administrator privileges:
+Check all three endpoints from each MongoDB container before reconfiguring. Adjust the ports if customized. Then run this through the helper, which connects to the current primary:
 
-```text
-127.0.0.1 mongo1 mongo2 mongo3
+```sh
+./scripts/mongosh.sh --quiet --eval '
+  const config = rs.conf();
+  for (const member of config.members) {
+    const match = /^(mongo[123]|host\.docker\.internal):([0-9]+)$/.exec(member.host);
+    if (!match) throw new Error("Unexpected member address: " + member.host);
+    member.host = "host.docker.internal:" + match[2];
+  }
+  printjson(rs.reconfig(config, {maxTimeMS: 60000}));
+'
+./scripts/mongosh.sh --quiet --eval 'printjson(rs.status().members.map(m => ({name:m.name,state:m.stateStr})))'
 ```
 
-The file is `/etc/hosts` on macOS and Linux, or `C:\Windows\System32\drivers\etc\hosts` on Windows. Edit the file in the environment where your client runs (Windows and WSL may have separate files).
-
-Then use this URI in `mongosh`, MongoDB Compass, or your application:
-
-```text
-mongodb://mongo1:27017,mongo2:27018,mongo3:27019/?replicaSet=rs0
-```
-
-A replica-aware client learns member addresses from MongoDB after contacting a seed. Those advertised names must resolve from the client as well as from the containers. Using `127.0.0.1` for the seeds alone does not remove that requirement. `directConnection=true` is useful for inspecting an individual member, but does not provide automatic failover.
-
-This repo uses Docker service DNS for member-to-member traffic instead of routing it through `host.docker.internal` and host-published ports. No host-gateway override is required. Do not map `host.docker.internal` to the example address `127.17.0.1`: loopback addresses refer to the current network namespace, and Docker gateway addresses vary by environment.
+Reconfiguration can trigger an election and briefly interrupt connections. Do not use `force: true` or delete volumes for this change. Clients must resolve `host.docker.internal` before using the updated set.
 
 ## Connect through the host IP
 
@@ -97,7 +143,7 @@ Choose **Authentication: None** in Compass. Port 27017 is `mongo1`; verify the c
 ./scripts/mongosh.sh --quiet --eval 'print(db.hello().primary)'
 ```
 
-If the primary is `mongo2` or `mongo3`, use port 27018 or 27019 respectively (or your configured port). A direct connection targets one member and does **not** automatically follow primary elections.
+Match the primary address's port to the service table: 27018 is `mongo2` and 27019 is `mongo3` (or use your configured ports). A direct connection targets one member and does **not** automatically follow primary elections.
 
 ### From another computer on your LAN
 
@@ -121,7 +167,7 @@ mongodb://192.168.1.50:27017/?directConnection=true
 
 Replace the example IP with your host's LAN IP. The chosen interface must exist on the Docker host. This exposes an **unauthenticated** database on that interface; use only a trusted private network, restrict access with your firewall, and do not forward these ports from the internet.
 
-For **automatic failover**, the client must also resolve the member names returned by MongoDB. Add `HOST_LAN_IP mongo1 mongo2 mongo3` (using the real IP) to the **client's** hosts file, then use the three-member URI in the Connect section without `directConnection=true`. Supplying three IP seeds alone does not change the advertised names.
+For **automatic failover**, the client must also resolve the member names returned by MongoDB. Add `HOST_LAN_IP host.docker.internal` (using the real IP) to the **client's** hosts file, then use the three-member URI in the Connect section without `directConnection=true`. Supplying three IP seeds alone does not change the advertised names.
 
 ## Experiment with failover
 
@@ -131,7 +177,7 @@ For **automatic failover**, the client must also resolve the member names return
    ./scripts/mongosh.sh --quiet --eval 'print(db.hello().primary)'
    ```
 
-2. Stop that service (replace `mongo1` if another service is primary):
+2. Match the returned port to the service table and stop that service (27017 is `mongo1`, 27018 is `mongo2`, and 27019 is `mongo3` by default):
 
    ```sh
    docker compose stop mongo1
@@ -183,7 +229,7 @@ docker compose up -d --wait --wait-timeout 180
 - If ports 27017–27019 are occupied, copy `.env.example` to `.env` **before the first start** and choose three unused ports. The advertised, container, and published ports change together. Update your client URI to match.
 - Replica-set configuration persists in the data volumes. Changing ports after initialization requires a deliberate `rs.reconfig()` migration or deleting this lab's volumes if its data is disposable. The healthcheck does not rewrite an existing set.
 - Check `docker compose ps`, `docker compose logs --tail 100`, and `docker compose config` if startup fails. All three services must be started together for initial setup.
-- If a host client connects to a seed but times out during discovery, check the hosts-file entries for all three service names. Containers use Docker DNS and do not need those host entries.
+- If a host client connects to a seed but times out during discovery, check that `host.docker.internal` resolves to the MongoDB host inside the client environment. Application containers need their own `extra_hosts` mapping; they do not inherit the host's hosts file.
 - A healthy secondary alone does not mean the set has a writable primary; query `db.hello()` or `rs.status()` to inspect the topology.
 
 For example, an isolated test alongside another MongoDB installation on macOS/Linux:

@@ -30,15 +30,20 @@ docker compose up -d --wait --wait-timeout 180
 wait_for_primary
 run_id="$(date +%s)-${RANDOM}"
 mongo "checkWrite(db.getSiblingDB('replica_set_lab').runCommand({insert:'checks',documents:[{_id:'${run_id}-before',phase:'before'}],writeConcern:{w:'majority',wtimeout:10000}}))"
-primary=$(mongo 'print(db.hello().primary)')
-primary=${primary%%:*}
-case "$primary" in mongo1|mongo2|mongo3) ;; *) echo "Unexpected primary: $primary" >&2; exit 1;; esac
+primary_id=$(mongo 'print(rs.status().members.find(m => m.state === 1)._id)')
+case "$primary_id" in
+  0) primary=mongo1 ;;
+  1) primary=mongo2 ;;
+  2) primary=mongo3 ;;
+  *) echo "Unexpected primary member ID: $primary_id" >&2; exit 1 ;;
+esac
 printf 'Stopping current primary: %s\n' "$primary"
 stopped=$primary
 docker compose stop "$primary"
 wait_for_primary
 replacement=$(mongo 'print(db.hello().primary)')
-[[ "${replacement%%:*}" != "$primary" ]]
+replacement_id=$(mongo 'print(rs.status().members.find(m => m.state === 1)._id)')
+[[ "$replacement_id" != "$primary_id" ]]
 printf 'New primary: %s\n' "$replacement"
 mongo "const lab=db.getSiblingDB('replica_set_lab'); if (!lab.checks.findOne({_id:'${run_id}-before'})) throw new Error('Missing pre-failover document'); checkWrite(lab.runCommand({insert:'checks',documents:[{_id:'${run_id}-after',phase:'after'}],writeConcern:{w:'majority',wtimeout:10000}}))"
 docker compose up -d --wait --wait-timeout 180

@@ -1,12 +1,14 @@
-# Local learning environment: unauthenticated MongoDB; defaults to host loopback.
+# Local learning environment: unauthenticated MongoDB on host-published ports.
 services:
   mongo1:
     image: mongo:${MONGO_VERSION:-8.0}
     environment:
       MONGO_PORT: ${MONGO1_PORT:-27017}
+    extra_hosts:
+      - "host.docker.internal:${MONGO_HOST_IP:-host-gateway}"
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO1_PORT:-27017}"]
     ports:
-      - "${MONGO_BIND_IP:-127.0.0.1}:${MONGO1_PORT:-27017}:${MONGO1_PORT:-27017}"
+      - "${MONGO_BIND_IP:-0.0.0.0}:${MONGO1_PORT:-27017}:${MONGO1_PORT:-27017}"
     healthcheck:
       test:
         - CMD
@@ -24,9 +26,9 @@ services:
             const result = rs.initiate({
               _id: 'rs0',
               members: [
-                {_id: 0, host: 'mongo1:${MONGO1_PORT:-27017}', priority: 1},
-                {_id: 1, host: 'mongo2:${MONGO2_PORT:-27018}', priority: 0.5},
-                {_id: 2, host: 'mongo3:${MONGO3_PORT:-27019}', priority: 0.5}
+                {_id: 0, host: 'host.docker.internal:${MONGO1_PORT:-27017}', priority: 1},
+                {_id: 1, host: 'host.docker.internal:${MONGO2_PORT:-27018}', priority: 0.5},
+                {_id: 2, host: 'host.docker.internal:${MONGO3_PORT:-27019}', priority: 0.5}
               ]
             });
             printjson(result);
@@ -44,9 +46,11 @@ services:
     image: mongo:${MONGO_VERSION:-8.0}
     environment:
       MONGO_PORT: ${MONGO2_PORT:-27018}
+    extra_hosts:
+      - "host.docker.internal:${MONGO_HOST_IP:-host-gateway}"
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO2_PORT:-27018}"]
     ports:
-      - "${MONGO_BIND_IP:-127.0.0.1}:${MONGO2_PORT:-27018}:${MONGO2_PORT:-27018}"
+      - "${MONGO_BIND_IP:-0.0.0.0}:${MONGO2_PORT:-27018}:${MONGO2_PORT:-27018}"
     healthcheck:
       test: ["CMD", "mongosh", "--port", "${MONGO2_PORT:-27018}", "--quiet", "--eval", "quit([1, 2].includes(rs.status().myState) ? 0 : 1)"]
       interval: 5s
@@ -61,9 +65,11 @@ services:
     image: mongo:${MONGO_VERSION:-8.0}
     environment:
       MONGO_PORT: ${MONGO3_PORT:-27019}
+    extra_hosts:
+      - "host.docker.internal:${MONGO_HOST_IP:-host-gateway}"
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO3_PORT:-27019}"]
     ports:
-      - "${MONGO_BIND_IP:-127.0.0.1}:${MONGO3_PORT:-27019}:${MONGO3_PORT:-27019}"
+      - "${MONGO_BIND_IP:-0.0.0.0}:${MONGO3_PORT:-27019}:${MONGO3_PORT:-27019}"
     healthcheck:
       test: ["CMD", "mongosh", "--port", "${MONGO3_PORT:-27019}", "--quiet", "--eval", "quit([1, 2].includes(rs.status().myState) ? 0 : 1)"]
       interval: 5s
