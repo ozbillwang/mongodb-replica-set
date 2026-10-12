@@ -1,6 +1,6 @@
 # MongoDB three-node replica set
 
-A Docker Compose lab for learning MongoDB replication, elections, and failover. It runs three data-bearing MongoDB 7.0 members in replica set `rs0` and initializes itself on the first start.
+A Docker Compose lab for learning MongoDB replication, elections, and failover. It runs three data-bearing MongoDB 8.0 members by default in replica set `rs0` and initializes itself on the first start.
 
 | Service | Default port | Election priority |
 | --- | --- | --- |
@@ -25,6 +25,31 @@ docker compose ps
 ```
 
 Startup may take a minute, in addition to the first image download. The healthcheck on `mongo1` initializes the set only when MongoDB reports `NotYetInitialized` (code 94). Every member must reach PRIMARY or SECONDARY before it becomes healthy. Other errors are surfaced rather than interpreted as a reason to initialize again.
+
+## Select the MongoDB version
+
+All three services use `mongo:${MONGO_VERSION:-8.0}`. The default image tag is `8.0`; set `MONGO_VERSION` in `.env` to choose another supported MongoDB image tag:
+
+```dotenv
+MONGO_VERSION=8.0
+```
+
+For a fresh lab, start the selected version with:
+
+```sh
+docker compose pull
+docker compose up -d --wait --wait-timeout 180
+```
+
+Use the same version for all members. The `8.0` tag follows patch releases within the 8.0 series; an exact patch tag can be used for reproducibility. Changing this setting does not migrate stored data or automatically change MongoDB's feature compatibility version (FCV).
+
+For an **existing replica set**, back up first and follow the [official 7.0-to-8.0 replica-set upgrade procedure](https://www.mongodb.com/docs/manual/release-notes/8.0-upgrade-replica-set/): verify FCV 7.0, upgrade secondaries one at a time, step down and upgrade the old primary, then validate the set. Enable FCV 8.0 on the primary once ready to use 8.0 features:
+
+```sh
+./scripts/mongosh.sh --quiet --eval 'printjson(db.adminCommand({setFeatureCompatibilityVersion:"8.0", confirm:true}))'
+```
+
+Do not downgrade an existing data volume simply by selecting an older image. Local upgrade backups under `.mongodb-backups/` are excluded from Git.
 
 ## Connect
 

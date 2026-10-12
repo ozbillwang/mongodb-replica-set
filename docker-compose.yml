@@ -1,7 +1,7 @@
 # Local learning environment: unauthenticated MongoDB; defaults to host loopback.
 services:
   mongo1:
-    image: mongo:7.0
+    image: mongo:${MONGO_VERSION:-8.0}
     environment:
       MONGO_PORT: ${MONGO1_PORT:-27017}
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO1_PORT:-27017}"]
@@ -41,7 +41,7 @@ services:
       - mongo1_config:/data/configdb
 
   mongo2:
-    image: mongo:7.0
+    image: mongo:${MONGO_VERSION:-8.0}
     environment:
       MONGO_PORT: ${MONGO2_PORT:-27018}
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO2_PORT:-27018}"]
@@ -58,7 +58,7 @@ services:
       - mongo2_config:/data/configdb
 
   mongo3:
-    image: mongo:7.0
+    image: mongo:${MONGO_VERSION:-8.0}
     environment:
       MONGO_PORT: ${MONGO3_PORT:-27019}
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO3_PORT:-27019}"]
