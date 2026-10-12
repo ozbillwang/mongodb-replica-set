@@ -10,7 +10,7 @@ A Docker Compose lab for learning MongoDB replication, elections, and failover. 
 
 `mongo1` is preferred as primary, but elections depend on member availability and replication progress. Always query the current primary before stopping it.
 
-This is a **local development and learning lab**. Authentication and TLS are disabled, and published ports bind to `127.0.0.1`. All containers share one machine, so this demonstrates process failure rather than protection from host failure. Production deployments need authentication, TLS, backups, and separate failure domains.
+This is a **local development and learning lab**. Authentication and TLS are disabled, and published ports bind to `127.0.0.1` by default. All containers share one machine, so this demonstrates process failure rather than protection from host failure. Production deployments need authentication, TLS, backups, and separate failure domains.
 
 ## Start
 
@@ -57,6 +57,46 @@ mongodb://mongo1:27017,mongo2:27018,mongo3:27019/?replicaSet=rs0
 A replica-aware client learns member addresses from MongoDB after contacting a seed. Those advertised names must resolve from the client as well as from the containers. Using `127.0.0.1` for the seeds alone does not remove that requirement. `directConnection=true` is useful for inspecting an individual member, but does not provide automatic failover.
 
 This repo uses Docker service DNS for member-to-member traffic instead of routing it through `host.docker.internal` and host-published ports. No host-gateway override is required. Do not map `host.docker.internal` to the example address `127.17.0.1`: loopback addresses refer to the current network namespace, and Docker gateway addresses vary by environment.
+
+## Connect through the host IP
+
+For a direct connection from the Docker host itself, no hosts-file entry is needed:
+
+```text
+mongodb://127.0.0.1:27017/?directConnection=true
+```
+
+Choose **Authentication: None** in Compass. Port 27017 is `mongo1`; verify the current primary before writing:
+
+```sh
+./scripts/mongosh.sh --quiet --eval 'print(db.hello().primary)'
+```
+
+If the primary is `mongo2` or `mongo3`, use port 27018 or 27019 respectively (or your configured port). A direct connection targets one member and does **not** automatically follow primary elections.
+
+### From another computer on your LAN
+
+Set `MONGO_BIND_IP` in `.env` to the Docker host's actual LAN IPv4 address. For example, if it is `192.168.1.50`:
+
+```dotenv
+MONGO_BIND_IP=192.168.1.50
+```
+
+Keep any existing port settings in `.env`. Apply the binding change without deleting data:
+
+```sh
+docker compose up -d --wait --wait-timeout 180
+```
+
+This recreates containers as needed and briefly interrupts connections. On the other computer, connect to the selected member using the host's IP:
+
+```text
+mongodb://192.168.1.50:27017/?directConnection=true
+```
+
+Replace the example IP with your host's LAN IP. The chosen interface must exist on the Docker host. This exposes an **unauthenticated** database on that interface; use only a trusted private network, restrict access with your firewall, and do not forward these ports from the internet.
+
+For **automatic failover**, the client must also resolve the member names returned by MongoDB. Add `HOST_LAN_IP mongo1 mongo2 mongo3` (using the real IP) to the **client's** hosts file, then use the three-member URI in the Connect section without `directConnection=true`. Supplying three IP seeds alone does not change the advertised names.
 
 ## Experiment with failover
 

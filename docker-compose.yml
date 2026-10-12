@@ -1,4 +1,4 @@
-# Local learning environment: unauthenticated MongoDB, bound to host loopback only.
+# Local learning environment: unauthenticated MongoDB; defaults to host loopback.
 services:
   mongo1:
     image: mongo:7.0
@@ -6,7 +6,7 @@ services:
       MONGO_PORT: ${MONGO1_PORT:-27017}
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO1_PORT:-27017}"]
     ports:
-      - "127.0.0.1:${MONGO1_PORT:-27017}:${MONGO1_PORT:-27017}"
+      - "${MONGO_BIND_IP:-127.0.0.1}:${MONGO1_PORT:-27017}:${MONGO1_PORT:-27017}"
     healthcheck:
       test:
         - CMD
@@ -46,7 +46,7 @@ services:
       MONGO_PORT: ${MONGO2_PORT:-27018}
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO2_PORT:-27018}"]
     ports:
-      - "127.0.0.1:${MONGO2_PORT:-27018}:${MONGO2_PORT:-27018}"
+      - "${MONGO_BIND_IP:-127.0.0.1}:${MONGO2_PORT:-27018}:${MONGO2_PORT:-27018}"
     healthcheck:
       test: ["CMD", "mongosh", "--port", "${MONGO2_PORT:-27018}", "--quiet", "--eval", "quit([1, 2].includes(rs.status().myState) ? 0 : 1)"]
       interval: 5s
@@ -63,7 +63,7 @@ services:
       MONGO_PORT: ${MONGO3_PORT:-27019}
     command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO3_PORT:-27019}"]
     ports:
-      - "127.0.0.1:${MONGO3_PORT:-27019}:${MONGO3_PORT:-27019}"
+      - "${MONGO_BIND_IP:-127.0.0.1}:${MONGO3_PORT:-27019}:${MONGO3_PORT:-27019}"
     healthcheck:
       test: ["CMD", "mongosh", "--port", "${MONGO3_PORT:-27019}", "--quiet", "--eval", "quit([1, 2].includes(rs.status().myState) ? 0 : 1)"]
       interval: 5s
