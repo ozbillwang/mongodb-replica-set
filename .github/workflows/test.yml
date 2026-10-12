@@ -11,7 +11,7 @@ jobs:
     env:
       COMPOSE_PROJECT_NAME: mongodb-rs-ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
       - name: Validate Compose and scripts
         run: |
           docker compose config --quiet
