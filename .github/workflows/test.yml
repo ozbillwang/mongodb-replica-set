@@ -12,6 +12,8 @@ jobs:
       COMPOSE_PROJECT_NAME: mongodb-rs-ci
     steps:
       - uses: actions/checkout@v7.0.1
+      - name: Set Docker host IP for replica set test
+        run: echo "MONGO_HOST_IP=$(hostname -I | awk '{print $1}')" >> "$GITHUB_ENV"
       - name: Validate Compose and scripts
         run: |
           docker compose config --quiet

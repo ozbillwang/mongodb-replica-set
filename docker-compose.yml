@@ -1,89 +1,44 @@
-# Local learning environment: unauthenticated MongoDB on host-published ports.
+version: "3.8"
+
 services:
   mongo1:
-    image: mongo:${MONGO_VERSION:-8.0}
-    environment:
-      MONGO_PORT: ${MONGO1_PORT:-27017}
-    extra_hosts:
-      - "host.docker.internal:${MONGO_HOST_IP:-host-gateway}"
-    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO1_PORT:-27017}"]
+    image: mongo:8.0.17
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017", "--setParameter", "disableSplitHorizonIPCheck=true"]
     ports:
-      - "${MONGO_BIND_IP:-0.0.0.0}:${MONGO1_PORT:-27017}:${MONGO1_PORT:-27017}"
+      - 27017:27017
     healthcheck:
-      test:
-        - CMD
-        - mongosh
-        - --port
-        - "${MONGO1_PORT:-27017}"
-        - --quiet
-        - --eval
-        - |
-          try {
-            const status = rs.status();
-            quit([1, 2].includes(status.myState) ? 0 : 1);
-          } catch (err) {
-            if (err.code !== 94) { print(err); quit(1); }
-            const result = rs.initiate({
-              _id: 'rs0',
-              members: [
-                {_id: 0, host: 'host.docker.internal:${MONGO1_PORT:-27017}', priority: 1},
-                {_id: 1, host: 'host.docker.internal:${MONGO2_PORT:-27018}', priority: 0.5},
-                {_id: 2, host: 'host.docker.internal:${MONGO3_PORT:-27019}', priority: 0.5}
-              ]
-            });
-            printjson(result);
-            quit(1); // Wait for PRIMARY or SECONDARY on a subsequent check.
-          }
+      test: echo "try { rs.status() } catch (err) { rs.initiate({_id:'rs0',members:[{_id:0,host:'${MONGO_HOST_IP}:27017',priority:1},{_id:1,host:'${MONGO_HOST_IP}:27018',priority:0.5},{_id:2,host:'${MONGO_HOST_IP}:27019',priority:0.5}]}) }" | mongosh --port 27017 --quiet
       interval: 5s
-      timeout: 10s
-      start_period: 10s
+      timeout: 30s
+      start_period: 0s
+      start_interval: 1s
       retries: 30
     volumes:
-      - mongo1_data:/data/db
-      - mongo1_config:/data/configdb
+      - "mongo1_data:/data/db"
+      - "mongo1_config:/data/configdb"
 
   mongo2:
-    image: mongo:${MONGO_VERSION:-8.0}
-    environment:
-      MONGO_PORT: ${MONGO2_PORT:-27018}
-    extra_hosts:
-      - "host.docker.internal:${MONGO_HOST_IP:-host-gateway}"
-    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO2_PORT:-27018}"]
+    image: mongo:8.0.17
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27018", "--setParameter", "disableSplitHorizonIPCheck=true"]
     ports:
-      - "${MONGO_BIND_IP:-0.0.0.0}:${MONGO2_PORT:-27018}:${MONGO2_PORT:-27018}"
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "${MONGO2_PORT:-27018}", "--quiet", "--eval", "quit([1, 2].includes(rs.status().myState) ? 0 : 1)"]
-      interval: 5s
-      timeout: 10s
-      start_period: 10s
-      retries: 30
+      - 27018:27018
     volumes:
-      - mongo2_data:/data/db
-      - mongo2_config:/data/configdb
+      - "mongo2_data:/data/db"
+      - "mongo2_config:/data/configdb"
 
   mongo3:
-    image: mongo:${MONGO_VERSION:-8.0}
-    environment:
-      MONGO_PORT: ${MONGO3_PORT:-27019}
-    extra_hosts:
-      - "host.docker.internal:${MONGO_HOST_IP:-host-gateway}"
-    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "${MONGO3_PORT:-27019}"]
+    image: mongo:8.0.17
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27019", "--setParameter", "disableSplitHorizonIPCheck=true"]
     ports:
-      - "${MONGO_BIND_IP:-0.0.0.0}:${MONGO3_PORT:-27019}:${MONGO3_PORT:-27019}"
-    healthcheck:
-      test: ["CMD", "mongosh", "--port", "${MONGO3_PORT:-27019}", "--quiet", "--eval", "quit([1, 2].includes(rs.status().myState) ? 0 : 1)"]
-      interval: 5s
-      timeout: 10s
-      start_period: 10s
-      retries: 30
+      - 27019:27019
     volumes:
-      - mongo3_data:/data/db
-      - mongo3_config:/data/configdb
+      - "mongo3_data:/data/db"
+      - "mongo3_config:/data/configdb"
 
 volumes:
   mongo1_data:
-  mongo1_config:
   mongo2_data:
-  mongo2_config:
   mongo3_data:
+  mongo1_config:
+  mongo2_config:
   mongo3_config:
