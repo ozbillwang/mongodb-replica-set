@@ -1,0 +1,28 @@
+name: Replica set smoke test
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  failover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COMPOSE_PROJECT_NAME: mongodb-rs-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Compose and scripts
+        run: |
+          docker compose config --quiet
+          bash -n scripts/*.sh
+      - name: Verify replication and primary failover
+        run: ./scripts/smoke-test.sh
+      - name: Show diagnostics
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --tail 100
+      - name: Remove test containers and data
+        if: always()
+        run: docker compose down --volumes
