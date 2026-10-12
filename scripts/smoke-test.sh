@@ -51,7 +51,11 @@ stopped=''
 wait_for_primary
 # Verify both documents on every member, including the recovered node.
 for service in mongo1 mongo2 mongo3; do
-  port=$(docker compose exec -T "$service" printenv MONGO_PORT)
+  case "$service" in
+    mongo1) port=27017 ;;
+    mongo2) port=27018 ;;
+    mongo3) port=27019 ;;
+  esac
   docker compose exec -T "$service" mongosh \
     "mongodb://localhost:${port}/?directConnection=true&readPreference=secondaryPreferred" \
     --quiet --eval "const deadline=Date.now()+60000; while (db.getSiblingDB('replica_set_lab').checks.countDocuments({_id:{\$in:['${run_id}-before','${run_id}-after']}}) !== 2) { if (Date.now()>deadline) throw new Error('Documents did not replicate to $service'); sleep(1000); }"
