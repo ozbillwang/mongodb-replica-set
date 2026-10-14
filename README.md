@@ -22,6 +22,8 @@ docker compose up -d --wait --wait-timeout 180
 ./scripts/mongosh.sh --quiet --eval 'printjson(rs.status().members.map(m => ({name:m.name,state:m.stateStr})))'
 ```
 
+The three containers use `restart: unless-stopped`, so Docker starts them again after the Docker service starts on reboot. After updating an existing deployment, run `docker compose up -d` once to apply the policy. Containers you explicitly stop or remove remain stopped.
+
 The Compose file publishes ports 27017–27019 on all host interfaces. Its initialization healthcheck advertises `${MONGO_HOST_IP}:27017`, `${MONGO_HOST_IP}:27018`, and `${MONGO_HOST_IP}:27019` to clients. MongoDB 8 normally rejects IP addresses as replica-set member names; the Compose commands include `disableSplitHorizonIPCheck=true` for this local lab. No `host.docker.internal` mapping is used.
 
 The three services have fixed ports and a fixed `mongo:8.0.17` image. Changing `.env` alone does not change those values.
